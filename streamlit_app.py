@@ -63,7 +63,7 @@ st.markdown("""
 # Header
 current_month = datetime.now().strftime("%B %Y")
 st.markdown("<h1 style='text-align:center; margin-bottom:0;'>Dedan Kimathi Rain AI</h1>", unsafe_allow_html=True)
-st.markdown(f"<h3 style='text-align:center; margin:8px 0 40px 0; color:#00D4FF;'>Live for Nyeri Farmers • {current_month}</h3>", unsafe_allow_html=True)
+st.markdown(f"<h3 style='text-align:center; margin:8px 0 40px 0;'>Live for Nyeri Farmers • {current_month}</h3>", unsafe_allow_html=True)
 
 # REAL HEADLINE FROM YOUR SUPABASE (this is now the star of the show)
 st.markdown(f"<h1 style='text-align:center; color:#00D4FF; margin:30px 0;'>{main_headline.upper()}</h1>", unsafe_allow_html=True)

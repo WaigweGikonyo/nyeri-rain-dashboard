@@ -56,7 +56,7 @@ st.markdown("""
 <style>
     .big {font-size:76px !important; font-weight:bold; text-align:center; margin:20px 0;}
     .med {font-size:38px !important; text-align:center; margin:15px 0;}
-    .crop {font-size:32px !important; text-align:center; margin:30px 0; line-height:1.5; color:#00FFA3;}
+    .crop {font-size:32px !important; text-align:center; margin:30px 0; line-height:1.5; color:#437C17;}
 </style>
 """, unsafe_allow_html=True)
 

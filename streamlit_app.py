@@ -51,7 +51,14 @@ main_headline = crop_suggestion.split("\n")[0].strip()
 if not main_headline:
     main_headline = "PANDA H520 NA KAT B9"
 
-
+# ───── CLEAN DESIGN (NO MORE HARAKA! MVUA FUPI!) ─────
+st.markdown("""
+<style>
+    .big {font-size:76px !important; font-weight:bold; text-align:center; margin:20px 0;}
+    .med {font-size:38px !important; text-align:center; margin:15px 0;}
+    .crop {font-size:32px !important; text-align:center; margin:30px 0; line-height:1.5; color:#AF69EF;}
+</style>
+""", unsafe_allow_html=True)
 
 # Header
 current_month = datetime.now().strftime("%B %Y")

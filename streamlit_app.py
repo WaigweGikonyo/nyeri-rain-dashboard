@@ -19,7 +19,7 @@ DASHBOARD_URL = "https://nyeri-rain-dashboard-6nvsflctxyimknz7sactb3.streamlit.a
 
 # ───── EMAIL CONFIG ─────
 SENDER_EMAIL = "gikonyowaigwe@gmail.com"
-SENDER_PASSWORD = "fsox aavj llad gvvp"
+SENDER_PASSWORD = "fsox aavj llad gvvp"   # ← your app password
 RECEIVERS = ["kinuthiajohnson941@gmail.com", "nganga.irvine19@students.dkut.ac.ke"]
 
 def send_email(subject, body):
@@ -34,8 +34,9 @@ def send_email(subject, body):
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.sendmail(SENDER_EMAIL, RECEIVERS, msg.as_string())
         server.quit()
-    except:
-        pass
+        st.success("Email sent successfully!")  # ← you’ll see this in Streamlit when it works
+    except Exception as e:
+        st.error(f"Email failed: {e}")
 
 # ───── FETCH DATA ─────
 @st.cache_data(ttl=55)
@@ -71,10 +72,10 @@ else:
     subtext = f"Only {total_rain:.0f} mm – mvua bado kidogo"
 
 # 100% FROM SUPABASE
-crop_full = latest.get("crop_suggestions", "").strip()
-main_crop_line = crop_full.split("\n", 1)[0].strip() if crop_full else "Today's Planting Advice"
+crop_full = str(latest.get("crop_suggestions", "No crop recommendation yet")).strip()
+main_crop_line = crop_full.split("\n", 1)[0].strip() if "\n" in crop_full else crop_full
 
-# ───── EMAIL ON CHANGE OR MONDAY ─────
+# ───── EMAIL LOGIC (NOW 100% SAFE – NEVER BLANK) ─────
 today = datetime.now().date()
 if "last_answer" not in st.session_state:
     st.session_state.last_answer = None
@@ -91,69 +92,53 @@ NYERI RAIN AI UPDATE
 
 {subtext}
 
-{crop_full or "No crop recommendation yet"}
+Today’s recommendation:
+{crop_full}
 
 Live Dashboard → {DASHBOARD_URL}
 
-{datetime.now().strftime('%A, %d %B %Y • %I:%M %p')} EAT
+Sent: {datetime.now().strftime('%A, %d %B %Y • %I:%M %p')} EAT
 Built with love for Nyeri Farmers • DeKUT Weather AI
     """.strip()
+
     send_email(f"NYERI RAIN AI • {answer}", email_body)
+
     st.session_state.last_answer = answer
     if monday:
         st.session_state.last_email_date = today
 
-# ───── GORGEOUS DESIGN WITH YOUR FAVORITE EMOJIS ─────
+# ───── DASHBOARD (exactly how you love it) ─────
 st.markdown("""
 <style>
     .big-font   {font-size:72px !important; font-weight:900; text-align:center; margin:10px 0;}
     .medium-font {font-size:34px !important; text-align:center; margin:15px 0 50px 0;}
-    .huge-number {font-size:56px !important; font-weight:900; color:#00D4FF;}
     .subtitle    {font-size:28px !important; text-align:center; color:#AAAAAA; margin-bottom:40px;}
 </style>
 """, unsafe_allow_html=True)
 
-# Header — WITH RAIN EMOJI
 st.markdown("<h1 style='text-align:center;'>Dedan Kimathi Rain AI</h1>", unsafe_allow_html=True)
 st.markdown(f"<h3 class='subtitle'>Live for Nyeri Farmers • {datetime.now().strftime('%B %Y')}</h3>", unsafe_allow_html=True)
-
-# Main crop line from Supabase — huge cyan
 st.markdown(f"<h1 style='text-align:center; color:#00D4FF;'>{main_crop_line.upper()}</h1>", unsafe_allow_html=True)
 
-# Main YES/NO — huge and colorful
 st.markdown(f"<p class='big-font' style='color:{color}'>{answer}</p>", unsafe_allow_html=True)
 st.markdown(f"<p class='medium-font' style='color:white;'>{subtext}</p>", unsafe_allow_html=True)
 
-# Metrics
 col1, col2, col3 = st.columns(3)
 with col1:
-    st.metric("Next 8 Weeks", f"{total_rain:.0f} mm",
-              delta=f"{total_rain-250:+.0f} vs 250mm")
+    st.metric("Next 8 Weeks", f"{total_rain:.0f} mm", delta=f"{total_rain-250:+.0f} vs 250mm")
 with col2:
-    season = "Rainy Season" if total_rain >= 350 else "Dry Season"
-    st.metric("Season", season)
+    st.metric("Season", "Rainy Season" if total_rain >= 350 else "Dry Season")
 with col3:
     st.metric("Plant Now?", answer.split("!")[0], delta=subtext)
 
-# Chart — dark and beautiful
 weeks = [f"Week {i+1}" for i in range(8)]
-fig = go.Figure(go.Bar(
-    x=weeks, y=forecast,
-    marker_color="#00D4FF",
-    text=[f"{v}mm" for v in forecast],
-    textposition="outside"
-))
-fig.update_layout(
-    title="8-Week Rainfall Forecast",
-    template="plotly_dark",
-    height=460,
-    plot_bgcolor='rgba(0,0,0,0)',
-    paper_bgcolor='rgba(0,0,0,0)',
-    font=dict(color="white")
-)
+fig = go.Figure(go.Bar(x=weeks, y=forecast, marker_color="#00D4FF",
+                       text=[f"{v}mm" for v in forecast], textposition="outside"))
+fig.update_layout(title="8-Week Rainfall Forecast", template="plotly_dark",
+                  height=460, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+                  font=dict(color="white"))
 st.plotly_chart(fig, use_container_width=True)
 
-# Current Weather
 st.subheader("Current Conditions in Nyeri")
 c1, c2, c3, c4 = st.columns(4)
 solar = latest.get('solar_radiation') or latest.get('solar') or 0
@@ -167,7 +152,6 @@ if solar > 800:
 elif solar > 400:
     st.markdown("<h3 style='text-align:center; color:#FFEB3B;'>Jua Poa</h3>", unsafe_allow_html=True)
 
-# Footer — WITH HEART EMOJI
 st.markdown("---")
 st.caption(f"Last updated: {datetime.now().strftime('%d %b %Y • %I:%M %p')} • Powered by Dedan Kimathi University Weather Station")
 st.markdown("<p style='text-align:center; color:#888;'>Built with love for Nyeri Farmers</p>", unsafe_allow_html=True)

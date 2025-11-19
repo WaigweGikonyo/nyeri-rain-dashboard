@@ -1,164 +1,172 @@
-import time
-import requests
-import serial
-import joblib
-import numpy as np
-import tensorflow as tf
+import streamlit as st
+import pandas as pd
+from supabase import create_client
 from datetime import datetime
-from supabase import create_client, Client
+import plotly.graph_objects as go
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
-# ==================== CONFIG ====================
+# ───── CONFIG ─────
+st.set_page_config(page_title="Nyeri Rain AI", layout="centered")
+st.markdown("<meta http-equiv='refresh' content='60'>", unsafe_allow_html=True)
+
 SUPABASE_URL = "https://ffbkgocjztagavphjbsq.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmYmtnb2NqenRhZ2F2cGhqYnNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NzA5NjcsImV4cCI6MjA3NjI0Njk2N30.sudxLkD1r8ARMEKjVMiyQqTg1KkKR7gSrWA-CKjVKb4"
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmYmtnb2NqenRhZ2F2cGhqYnNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NzA5NjcsImV4cCI6MjA3NjI0Njk2N30.sudxLkD1r8ARMEKjVMiyQqTg1KkKR7gSrWA-CKjVKb4"
+supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
-LAT, LON = -0.445, 36.860  # Nyeri exact
+DASHBOARD_URL = "https://nyeri-rain-dashboard-6nvsflctxyimknz7sactb3.streamlit.app"
 
-MODEL_PATH = r"C:\Users\user\OneDrive\Desktop\Final Project\nyeri_model_dedan_v5\rain_model_dedan_v5.keras"
-SCALER_PATH = r"C:\Users\user\OneDrive\Desktop\Final Project\nyeri_model_dedan_v5\scaler.pkl"
+# ───── EMAIL CONFIG ─────
+SENDER_EMAIL = "gikonyowaigwe@gmail.com"
+SENDER_PASSWORD = "fsox aavj llad gvvp"
+RECEIVERS = ["kinuthiajohnson941@gmail.com", "nganga.irvine19@students.dkut.ac.ke"]
 
-# ==================== SUPABASE & MODEL ====================
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-print("Loading Dedan Kimathi Rain AI v5.1-nyeri-live...")
-model = tf.keras.models.load_model(MODEL_PATH)
-scaler = joblib.load(SCALER_PATH)
-print("Model loaded – ready for Nyeri farmers!")
-
-# ==================== ESP8266 + DHT22 (COM4) ====================
-try:
-    ser = serial.Serial("COM4", 115200, timeout=15)
-    time.sleep(2)
-    ser.flushInput()
-    print("ESP8266 + DHT22 connected on COM4 → LIVE TEMPERATURE & HUMIDITY")
-except Exception as e:
-    print("ESP8266 NOT DETECTED! Check cable & COM port")
-    print(e)
-    exit()
-
-# ==================== OPEN-METEO (Solar, Wind, Precip only) ====================
-def get_api_weather():
-    url = (
-        f"https://api.open-meteo.com/v1/forecast?"
-        f"latitude={LAT}&longitude={LON}&current=shortwave_radiation,wind_speed_10m,precipitation&timezone=Africa/Nairobi"
-    )
+def send_email(subject, body):
     try:
-        data = requests.get(url, timeout=10).json()["current"]
-        return {
-            "solar": float(data["shortwave_radiation"]),
-            "wind": float(data["wind_speed_10m"]),
-            "precip": float(data["precipitation"])
-        }
-    except:
-        print("Open-Meteo down → using safe values")
-        return {"solar": 180.0, "wind": 6.0, "precip": 0.0}
-
-# ==================== READ DHT22 FROM ESP8266 ====================
-def read_dht22():
-    try:
-        if ser.in_waiting > 0:
-            line = ser.readline().decode("utf-8", errors="ignore").strip()
-            if "," in line:
-                parts = line.split(",")
-                if len(parts) >= 2:
-                    temp = float(parts[0])
-                    hum = float(parts[1])
-                    if 10 <= temp <= 45 and 20 <= hum <= 100:
-                        return round(temp, 2), round(hum, 1)
+        msg = MIMEMultipart()
+        msg["From"] = SENDER_EMAIL
+        msg["To"] = ", ".join(RECEIVERS)
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain", "utf-8"))
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server.starttls()
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        server.sendmail(SENDER_EMAIL, RECEIVERS, msg.as_string())
+        server.quit()
     except:
         pass
-    return None, None
 
-# ==================== PREDICTION (FIXED HISTORY – NO NULLS) ====================
-def predict_8weeks(temp, rh, wind, solar, precip):
-    week = datetime.now().isocalendar()[1]
-    
-    history = []
-    for i in range(12):
-        past_week = (week - (12 - i) + 52) % 52
-        sin_w = np.sin(2 * np.pi * past_week / 52)
-        cos_w = np.cos(2 * np.pi * past_week / 52)
-        
-        # Realistic Nyeri climate pattern
-        base_temp = 19 + 4 * np.sin(2 * np.pi * (past_week - 8) / 52)
-        base_rh = 78
-        base_wind = 5.5
-        base_solar = 200
-        base_precip = 25 if past_week in range(10,22) or past_week in range(42,50) else 8  # Long & short rains
-
-        history.append([
-            base_temp, base_rh, base_wind, base_solar, base_precip,
-            past_week, sin_w, cos_w,
-            datetime.now().month, base_precip, 0.0
-        ])
-    
-    # Inject CURRENT real sensor + API data
-    history[-1][:5] = [temp, rh, wind, solar, precip]
-    
-    X = scaler.transform(history)
-    X = X.reshape(1, 12, -1)
-    pred = model.predict(X, verbose=0)[0]
-    pred = np.maximum(pred, 0).round(2)
-    return pred.tolist()
-
-# ==================== CROP ADVICE ====================
-def get_advice(forecast):
-    total = sum(forecast)
-    good_weeks = sum(1 for x in forecast if x >= 50)
-    month = datetime.now().month
-
-    if total >= 500 and good_weeks >= 5:
-        return "MVUA NZURI SANA!\nPANDA H6213, ROSE COCO NA MAHINDI SASA!"
-    elif total >= 400 and good_weeks >= 4:
-        return "PANDA H520 NA KAT B9 HARAKA!\nMvua fupi lakini ya kutosha"
-    elif total >= 300:
-        return "PANDA H624 AU MALAIKA\nMvua ya wastani – bado poa"
-    else:
-        return "Subiri kidogo – mvua inakuja hivi karibuni"
-
-# ==================== MAIN LOOP (5 MINUTES) ====================
-print("\nDEKUT RAIN AI v5.1 → LIVE WITH DHT22 SENSOR")
-print("="*80)
-
-while True:
+# ───── FETCH DATA ─────
+@st.cache_data(ttl=55)
+def get_data():
     try:
-        print(f"\n[{datetime.now().strftime('%d %b %Y • %H:%M')}] Reading DHT22...")
+        res = supabase.table("weather_data").select("*").order("timestamp", desc=True).limit(1).execute()
+        return pd.DataFrame(res.data)
+    except:
+        return pd.DataFrame()
 
-        temp, rh = read_dht22()
-        if temp is None or rh is None:
-            print("No data from DHT22 → skipping this cycle")
-            time.sleep(60)
-            continue
+df = get_data()
 
-        api = get_api_weather()
+# ───── BEAUTIFUL WAITING SCREEN (when no data) ─────
+if df.empty:
+    st.markdown("""
+    <div style="text-align:center; padding-top:120px;">
+        <h1 style="font-size:68px; font-weight:900; color:#00F0FF; margin:0;">
+            Nyeri Rain AI
+        </h1>
+        <p style="font-size:28px; color:#BBBBBB; margin:20px 0 100px 0;">
+            Live for Nyeri Farmers
+        </p>
+        <h2 style="font-size:56px; font-weight:900; color:#00FF88;">
+            Waiting for Sensor...
+        </h2>
+        <p style="font-size:26px; color:#888888; margin-top:30px;">
+            Data will appear automatically when the weather station<br>sends the next update
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    st.stop()
 
-        print(f"Temperature: {temp}°C | Humidity: {rh}% (DHT22)")
-        print(f"Solar: {api['solar']:.0f} W/m² | Wind: {api['wind']:.1f} m/s | Precip: {api['precip']:.1f} mm")
+latest = df.iloc[0]
+forecast = latest.get("forecast_weeks") or [0]*8
+total_rain = sum(forecast)
 
-        forecast = predict_8weeks(temp, rh, api["wind"], api["solar"], api["precip"])
-        total_rain = sum(forecast)
-        advice = get_advice(forecast)
+# ───── PLANTING ADVICE ─────
+good_weeks = sum(1 for r in forecast if r >= 50)
+if total_rain >= 400 and good_weeks >= 4:
+    answer = "YES! Panda Sasa!"
+    color = "#00FF41"
+    subtext = f"Perfect rains ahead → {total_rain:.0f} mm"
+elif total_rain >= 300:
+    answer = "Maybe – Jaribu Tu"
+    color = "#FFB800"
+    subtext = f"{total_rain:.0f} mm – okay for some crops"
+else:
+    answer = "NO – Subiri Kidogo"
+    color = "#FF3B30"
+    subtext = f"Only {total_rain:.0f} mm – mvua bado kidogo"
 
-        record = {
-            "timestamp": datetime.now().isoformat(),
-            "temperature": temp,
-            "humidity": rh,
-            "precipitation": round(api["precip"], 2),
-            "solar_radiation": round(api["solar"], 1),
-            "wind_speed": round(api["wind"], 2),
-            "forecast_weeks": forecast,
-            "crop_suggestions": advice,
-            "model_version": "v5.1-nyeri-dht22-live"
-        }
+# FROM SUPABASE
+crop_full = str(latest.get("crop_suggestions", "No crop recommendation yet")).strip()
+main_crop_line = crop_full.split("\n", 1)[0].strip() if "\n" in crop_full else crop_full
 
-        supabase.table("weather_data").insert(record).execute()
-        print(f"UPDATE SENT → {advice}")
-        print(f"8-Week Total: {total_rain:.0f} mm → {forecast}\n")
+# ───── EMAIL (NEVER BLANK) ─────
+today = datetime.now().date()
+if "last_answer" not in st.session_state:
+    st.session_state.last_answer = None
+    st.session_state.last_email_date = None
 
-        time.sleep(300)  # Every 5 minutes
+changed = answer != st.session_state.last_answer
+monday = today.weekday() == 0
 
-    except KeyboardInterrupt:
-        print("\nStopped. Asante sana!")
-        ser.close()
-        break
-    except Exception as e:
-        print(f"Error: {e}")
-        time.sleep(60)
+if changed or (monday and st.session_state.last_email_date != today):
+    email_body = f"""
+NYERI RAIN AI UPDATE • {datetime.now().strftime('%d %b %Y')}
+
+{answer}
+
+{subtext}
+
+Today’s recommendation:
+{crop_full}
+
+Live Dashboard → {DASHBOARD_URL}
+
+Sent: {datetime.now().strftime('%I:%M %p')} EAT
+Built with love for Nyeri Farmers • DeKUT Weather AI
+    """.strip()
+
+    send_email(f"NYERI RAIN AI • {answer}", email_body)
+    st.session_state.last_answer = answer
+    if monday:
+        st.session_state.last_email_date = today
+
+# ───── GORGEOUS DESIGN ─────
+st.markdown("""
+<style>
+    .big-font   {font-size:72px !important; font-weight:900; text-align:center; margin:10px 0;}
+    .medium-font {font-size:34px !important; text-align:center; margin:15px 0 50px 0;}
+    .subtitle    {font-size:28px !important; text-align:center; color:#AAAAAA; margin-bottom:40px;}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("<h1 style='text-align:center;'>Dedan Kimathi Rain AI</h1>", unsafe_allow_html=True)
+st.markdown(f"<h3 class='subtitle'>Live for Nyeri Farmers • {datetime.now().strftime('%B %Y')}</h3>", unsafe_allow_html=True)
+st.markdown(f"<h1 style='text-align:center; color:#00D4FF;'>{main_crop_line.upper()}</h1>", unsafe_allow_html=True)
+
+st.markdown(f"<p class='big-font' style='color:{color}'>{answer}</p>", unsafe_allow_html=True)
+st.markdown(f"<p class='medium-font' style='color:white;'>{subtext}</p>", unsafe_allow_html=True)
+
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.metric("Next 8 Weeks", f"{total_rain:.0f} mm", delta=f"{total_rain-250:+.0f} vs 250mm")
+with col2:
+    st.metric("Season", "Rainy Season" if total_rain >= 350 else "Dry Season")
+with col3:
+    st.metric("Plant Now?", answer.split("!")[0], delta=subtext)
+
+weeks = [f"Week {i+1}" for i in range(8)]
+fig = go.Figure(go.Bar(x=weeks, y=forecast, marker_color="#00D4FF",
+                       text=[f"{v}mm" for v in forecast], textposition="outside"))
+fig.update_layout(title="8-Week Rainfall Forecast", template="plotly_dark",
+                  height=460, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+                  font=dict(color="white"))
+st.plotly_chart(fig, use_container_width=True)
+
+st.subheader("Current Conditions in Nyeri")
+c1, c2, c3, c4 = st.columns(4)
+solar = latest.get('solar_radiation') or latest.get('solar') or 0
+c1.metric("Temperature", f"{latest['temperature']:.1f}°C")
+c2.metric("Humidity", f"{latest['humidity']:.0f}%")
+c3.metric("Wind Speed", f"{latest['wind_speed']:.1f} m/s")
+c4.metric("Solar Radiation", f"{solar:.0f} W/m²", "Sunny!" if solar > 600 else "Cloudy")
+
+if solar > 800:
+    st.markdown("<h2 style='text-align:center; color:#FFD700;'>JUA KALI SANA!</h2>", unsafe_allow_html=True)
+elif solar > 400:
+    st.markdown("<h3 style='text-align:center; color:#FFEB3B;'>Jua Poa</h3>", unsafe_allow_html=True)
+
+st.markdown("---")
+st.caption(f"Last updated: {datetime.now().strftime('%d %b %Y • %I:%M %p')} • Powered by Dedan Kimathi University Weather Station")
+st.markdown("<p style='text-align:center; color:#888;'>Built with love for Nyeri Farmers</p>", unsafe_allow_html=True)

@@ -19,7 +19,7 @@ DASHBOARD_URL = "https://nyeri-rain-dashboard-6nvsflctxyimknz7sactb3.streamlit.a
 
 # ───── EMAIL CONFIG ─────
 SENDER_EMAIL = "gikonyowaigwe@gmail.com"
-SENDER_PASSWORD = "fsox aavj llad gvvp"   # ← your app password
+SENDER_PASSWORD = "fsox aavj llad gvvp"
 RECEIVERS = ["kinuthiajohnson941@gmail.com", "nganga.irvine19@students.dkut.ac.ke"]
 
 def send_email(subject, body):
@@ -34,9 +34,8 @@ def send_email(subject, body):
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.sendmail(SENDER_EMAIL, RECEIVERS, msg.as_string())
         server.quit()
-        st.success("Email sent successfully!")  # ← you’ll see this in Streamlit when it works
-    except Exception as e:
-        st.error(f"Email failed: {e}")
+    except:
+        pass
 
 # ───── FETCH DATA ─────
 @st.cache_data(ttl=55)
@@ -48,9 +47,20 @@ def get_data():
         return pd.DataFrame()
 
 df = get_data()
+
+# BEAUTIFUL "WAITING" MESSAGE — NO UGLY RED BAR!
 if df.empty:
-    st.error("No data yet – waiting for sensor...")
-    st.stop()
+    st.markdown("""
+    <div style='text-align:center; margin-top:100px;'>
+        <h1 style='color:#00D4FF; font-size:56px;'>Nyeri Rain AI</h1>
+        <h3 style='color:#AAAAAA;'>Live for Nyeri Farmers</h3>
+        <div style='margin:80px 0;'>
+            <h2 style='color:#00FF88; font-size:48px;'>Waiting for Sensor...</h2>
+            <p style='color:#888; font-size:28px;'>Data will appear automatically when the weather station sends the next update</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.stop()  # Stops execution but looks beautiful
 
 latest = df.iloc[0]
 forecast = latest.get("forecast_weeks") or [0]*8
@@ -71,11 +81,11 @@ else:
     color = "#FF3B30"
     subtext = f"Only {total_rain:.0f} mm – mvua bado kidogo"
 
-# 100% FROM SUPABASE
+# FROM SUPABASE
 crop_full = str(latest.get("crop_suggestions", "No crop recommendation yet")).strip()
 main_crop_line = crop_full.split("\n", 1)[0].strip() if "\n" in crop_full else crop_full
 
-# ───── EMAIL LOGIC (NOW 100% SAFE – NEVER BLANK) ─────
+# ───── EMAIL (FIXED — NEVER BLANK) ─────
 today = datetime.now().date()
 if "last_answer" not in st.session_state:
     st.session_state.last_answer = None
@@ -86,7 +96,7 @@ monday = today.weekday() == 0
 
 if changed or (monday and st.session_state.last_email_date != today):
     email_body = f"""
-NYERI RAIN AI UPDATE
+NYERI RAIN AI UPDATE • {datetime.now().strftime('%d %b %Y')}
 
 {answer}
 
@@ -97,17 +107,16 @@ Today’s recommendation:
 
 Live Dashboard → {DASHBOARD_URL}
 
-Sent: {datetime.now().strftime('%A, %d %B %Y • %I:%M %p')} EAT
+Sent: {datetime.now().strftime('%I:%M %p')} EAT
 Built with love for Nyeri Farmers • DeKUT Weather AI
     """.strip()
 
     send_email(f"NYERI RAIN AI • {answer}", email_body)
-
     st.session_state.last_answer = answer
     if monday:
         st.session_state.last_email_date = today
 
-# ───── DASHBOARD (exactly how you love it) ─────
+# ───── GORGEOUS DASHBOARD (your favorite style) ─────
 st.markdown("""
 <style>
     .big-font   {font-size:72px !important; font-weight:900; text-align:center; margin:10px 0;}

@@ -3,20 +3,19 @@ import pandas as pd
 from supabase import create_client
 from datetime import datetime
 import plotly.graph_objects as go
-import time
 
 # ───── PAGE CONFIG ─────
 st.set_page_config(page_title="Dedan Kimathi Rain AI", layout="centered")
 
-# Auto-refresh every 60 seconds
-st.markdown("<meta http-equiv='refresh' content='60'>", unsafe_allow_html=True)
+# Auto-refresh every minute
+st.markdown('<meta http-equiv="refresh" content="60">', unsafe_allow_html=True)
 
 # ───── SUPABASE ─────
-SUPABASE_URL = "https://ffbkgocjztagavphjbsq.supabase.co"
-SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmYmtnb2NqenRhZ2F2cGhqYnNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NzA5NjcsImV4cCI6MjA3NjI0Njk2N30.sudxLkD1r8ARMEKjVMiyQqTg1KkKR7gSrWA-CKjVKb4"
-supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+supabase = create_client(
+    "https://ffbkgocjztagavphjbsq.supabase.co",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmYmtnb2NqenRhZ2F2cGhqYnNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NzA5NjcsImV4cCI6MjA3NjI0Njk2N30.sudxLkD1r8ARMEKjVMiyQqTg1KkKR7gSrWA-CKjVKb4"
+)
 
-# ───── FETCH LATEST DATA ─────
 @st.cache_data(ttl=55)
 def get_data():
     try:
@@ -34,82 +33,91 @@ latest = df.iloc[0]
 forecast = latest.get("forecast_weeks") or [0]*8
 total_rain = sum(forecast)
 
-# ───── PLANTING LOGIC (NO EMOJIS) ─────
+# Planting Logic
 good_weeks = sum(1 for r in forecast if r >= 50)
 if total_rain >= 400 and good_weeks >= 4:
-    planting_advice = "YES! Panda Sasa!"
-    advice_color = "#00C853"
+    decision = "YES"
+    decision_color = "#00C853"
+    subtext = "Panda Sasa!"
 elif total_rain >= 300:
-    planting_advice = "Maybe – Jaribu Tu"
-    advice_color = "#FF9800"
+    decision = "MAYBE"
+    decision_color = "#FF9800"
+    subtext = "Jaribu Tu"
 else:
-    planting_advice = "NO – Subiri Kidogo"
-    advice_color = "#D32F2F"
+    decision = "NO"
+    decision_color = "#D32F2F"
+    subtext = "Subiri Kidogo"
 
-# ───── 100% FROM SUPABASE (NO HARD-CODED TEXT) ─────
+# 100% from Supabase
 crop_suggestion = latest.get("crop_suggestions", "").strip()
 main_headline = crop_suggestion.split("\n", 1)[0].strip() if crop_suggestion else "Waiting for today’s advice..."
 
-# ───── CLEAN LIGHT THEME DESIGN (EXACTLY LIKE YOUR PHOTO) ─────
+# ───── ABSOLUTELY GORGEOUS & PRACTICAL DESIGN ─────
 st.markdown("""
 <style>
-    .big-headline {font-size:  font-size: 52px; font-weight: bold; text-align: center; color: #00ACC1; margin: 30px 0 10px 0;}
-    .rain-total {font-size: 64px; font-weight: bold; text-align: center; color: #212121; margin: 20px 0;}
-    .delta {font-size: 24px; text-align: center; color: #00C853;}
-    .advice {font-size: 80px; font-weight: bold; text-align: center; margin: 40px 0 20px 0;}
+    .title     {font-size: 52px !important; font-weight: 800; text-align: center; color: #1a1a1a; margin: 10px 0 0 0;}
+    .subtitle  {font-size: 28px !important; text-align: center; color: #333333; margin: 0 0 50px 0;}
+    .headline  {font-size: 58px !important; font-weight: 900; text-align: center; color: #00ACC1; margin: 30px 0 15px 0; line-height: 1.2;}
+    .rain      {font-size: 96px !important; font-weight: 900; text-align: center; color: #000000; margin: 20px 0 5px 0;}
+    .delta     {font-size: 34px !important; text-align: center; color: #00C853; margin: 0 0 50px 0;}
+    .decision  {font-size: 140px !important; font-weight: 900; text-align: center; margin: 40px 0 10px 0; line-height: 1;}
+    .subtext   {font-size: 42px !important; font-weight: bold; text-align: center; margin: -10px 0 60px 0;}
+    .chart     {margin: 40px 0;}
+    .weather   {font-size: 32px !important; margin: 20px 0 10px 0;}
+    .footer    {text-align: center; color: #444444; font-size: 20px; margin-top: 60px;}
+    .stMetric > div {font-size: 28px !important;}
 </style>
 """, unsafe_allow_html=True)
 
 # Header
-st.markdown("<h1 style='text-align:center; color:#212121; margin-bottom:5px;'>Dedan Kimathi Rain AI</h1>", unsafe_allow_html=True)
-st.markdown(f"<h3 style='text-align:center; color:#666;'>Live for Nyeri Farmers • {datetime.now().strftime('%B %Y')}</h3>", unsafe_allow_html=True)
+st.markdown('<div class="title">Dedan Kimathi Rain AI</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="subtitle">Live for Nyeri Farmers • {datetime.now().strftime("%B %Y")}</div>', unsafe_allow_html=True)
 
-# Main crop headline from Supabase
-st.markdown(f"<div class='big-headline'>{main_headline.upper()}</div>", unsafe_allow_html=True)
+# Main Supabase headline
+st.markdown(f'<div class="headline">{main_headline.upper()}</div>', unsafe_allow_html=True)
 
-# Rain total
-st.markdown(f"<div class='rain-total'>{total_rain:.0f} mm</div>", unsafe_allow_html=True)
-st.markdown(f"<div class='delta'>+{total_rain-250:.0f} vs 250mm target</div>", unsafe_allow_html=True)
+# Total Rain
+st.markdown(f'<div class="rain">{total_rain:.0f} mm</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="delta">+{total_rain-250:.0f} vs 250mm target</div>', unsafe_allow_html=True)
 
-# Season
-st.markdown("<h2 style='text-align:center; color:#212121; margin:40px 0 10px 0;'>Rainy Season</h2>", unsafe_allow_html=True)
+# Decision
+st.markdown(f'<div class="decision" style="color:{decision_color};">{decision}</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="subtext" style="color:{decision_color};">{subtext}</div>', unsafe_allow_html=True)
 
-# Plant Now?
-st.markdown(f"<div class='advice' style='color:{advice_color};'>{planting_advice.split('!')[0] if '!' in planting_advice else planting_advice}</div>", unsafe_allow_html=True)
-if "YES" in planting_advice:
-    st.markdown("<p style='text-align:center; font-size:28px; color:#00C853; margin-top:-20px;'>Panda Sasa!</p>", unsafe_allow_html=True)
-elif "NO" in planting_advice:
-    st.markdown("<p style='text-align:center; font-size:28px; color:#D32F2F; margin-top:-20px;'>Wait a little</p>", unsafe_allow_html=True)
-
-# 8-Week Chart
+# Beautiful 8-week chart
 weeks = [f"W{i+1}" for i in range(8)]
-fig = go.Figure(data=[go.Bar(
+fig = go.Figure(go.Bar(
     x=weeks,
     y=forecast,
-    marker_color='#00ACC1',
+    marker_color="#00ACC1",
     text=[f"{v}mm" for v in forecast],
-    textposition='outside'
-)])
+    textposition="outside",
+    textfont=dict(size=18, color="#000000")
+))
 fig.update_layout(
     title="Next 8 Weeks",
+    title_font=dict(size=28, color="#000000"),
     template="simple_white",
-    height=400,
-    margin=dict(l=40, r=40, t=60, b=40),
-    yaxis=dict(showgrid=False, range=[0, max(forecast)*1.3])
+    height=460,
+    margin=dict(l=30, r=30, t=80, b=30),
+    yaxis=dict(visible=False, range=[0, max(forecast)*1.35 if forecast else 100])
 )
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
-# Current Weather
-st.markdown("### Current Weather")
-col1, col2, col3 = st.columns(3)
+# Current Weather – big & clear
+st.markdown('<h2 class="weather">Current Weather</h2>', unsafe_allow_html=True)
 solar = latest.get("solar_radiation") or latest.get("solar") or 0
 
-col1.metric("Temperature", f"{latest['temperature']:.1f}°C", "Temperature")
-col2.metric("", f"{latest['humidity']:.0f}%", "Humidity")
-col3.metric("", f"{latest['wind_speed']:.1f} m/s", "Wind")
-
-st.metric("Solar", f"{solar:.0f} W/m²", "Sunny" if solar > 600 else "Cloudy")
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+    st.metric("Temperature", f"{latest['temperature']:.1f}°C")
+with col2:
+    st.metric("Humidity", f"{latest['humidity']:.0f}%")
+with col3:
+    st.metric("Wind", f"{latest['wind_speed']:.1f} m/s")
+with col4:
+    st.metric("Solar", f"{solar:.0f} W/m²", "Sunny" if solar > 600 else "Cloudy")
 
 # Footer
 st.markdown("---")
-st.caption(f"Last updated: {datetime.now().strftime('%d %B %Y • %I:%M %p')} EAT | Model: v5.1-nyeri-live")
+st.markdown(f'<div class="footer">Last updated: {datetime.now().strftime("%d %B %Y • %I:%M %p")} EAT<br>Model: v5.1-nyeri-live</div>', unsafe_allow_html=True)

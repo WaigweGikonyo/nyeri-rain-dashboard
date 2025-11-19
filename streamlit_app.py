@@ -4,6 +4,9 @@ from supabase import create_client
 from datetime import datetime
 import plotly.graph_objects as go
 import time
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # ───── CONFIG & AUTO REFRESH ─────
 st.set_page_config(page_title="Nyeri Rain AI", layout="centered")
@@ -14,6 +17,32 @@ st.markdown("<script>setTimeout(() => window.location.reload(), 60000);</script>
 SUPABASE_URL = "https://ffbkgocjztagavphjbsq.supabase.co"
 SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmYmtnb2NqenRhZ2F2cGhqYnNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NzA5NjcsImV4cCI6MjA3NjI0Njk2N30.sudxLkD1r8ARMEKjVMiyQqTg1KkKR7gSrWA-CKjVKb4"
 supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+# ───── EMAIL CONFIG (CHANGE THESE 3 LINES ONLY!) ─────
+SENDER_EMAIL = "gikonyowaigwe@gmail.com"                    # ← YOUR Gmail
+SENDER_PASSWORD = "fsox aavj llad gvvp"                 # ← 16-digit App Password (not real password)
+RECEIVER_EMAILS = ["kinuthiajohnson941@gmail.com", "nganga.irvine19@students.dkut.ac.ke"]  # ← Add as many as you want
+
+# ───── EMAIL FUNCTION ─────
+def send_alert_email(subject, body):
+    if not SENDER_EMAIL or "yourgmail" in SENDER_EMAIL:
+        return  # safety: don't send if not configured
+
+    message = MIMEMultipart()
+    message["From"] = SENDER_EMAIL
+    message["To"] = ", ".join(RECEIVER_EMAILS)
+    message["Subject"] = f"NYERI RAIN AI • {subject}"
+
+    message.attach(MIMEText(body, "plain", "utf-8"))
+
+    try:
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server.starttls()
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        server.sendmail(SENDER_EMAIL, RECEIVER_EMAILS, message.as_string())
+        server.quit()
+    except Exception as e:
+        st.error("Email failed to send. Check credentials.")
 
 # ───── FETCH LATEST DATA ─────
 @st.cache_data(ttl=55)
@@ -45,13 +74,33 @@ else:
     advice_color = "#FF3B30"
     emoji = "Hourglass"
 
-# ───── CROP SUGGESTION FROM SUPABASE (this controls the big headline) ─────
-crop_suggestion = latest.get("crop_suggestions", "Panda H520 na KAT B9").strip()
-main_headline = crop_suggestion.split("\n")[0].strip()
-if not main_headline:
-    main_headline = "PANDA H520 NA KAT B9"
+# ───── 100% FROM SUPABASE (NO HARD-CODED TEXT) ─────
+crop_suggestion = latest.get("crop_suggestions", "").strip()
+main_headline = crop_suggestion.split("\n", 1)[0].strip() if crop_suggestion else "Waiting for today's planting advice..."
 
-# ───── CLEAN DESIGN (NO MORE HARAKA! MVUA FUPI!) ─────
+# ───── SEND EMAIL ONLY WHEN ADVICE CHANGES ─────
+if "last_advice" not in st.session_state:
+    st.session_state.last_advice = None
+
+if planting_advice != st.session_state.last_advice:
+    email_body = f"""
+NYERI RAIN AI – NEW PLANTING ALERT!
+
+Current Advice: {planting_advice}
+Expected Rain (8 weeks): {total_rain:.0f} mm
+
+Today's Recommendation:
+{crop_suggestion or "No advice yet"}
+
+View live dashboard: https://your-app-name.streamlit.app
+
+Sent: {datetime.now().strftime('%d %B %Y at %I:%M %p')}
+    """.strip()
+
+    send_alert_email(planting_advice, email_body)
+    st.session_state.last_advice = planting_advice
+
+# ───── DESIGN ─────
 st.markdown("""
 <style>
     .big {font-size:76px !important; font-weight:bold; text-align:center; margin:20px 0;}
@@ -63,36 +112,33 @@ st.markdown("""
 # Header
 current_month = datetime.now().strftime("%B %Y")
 st.markdown("<h1 style='text-align:center; margin-bottom:0;'>Dedan Kimathi Rain AI</h1>", unsafe_allow_html=True)
-st.markdown(f"<h3 style='text-align:center; margin:8px 0 40px 0; color:#00D4FF;'>Live for Nyeri Farmers • {current_month}</h3>", unsafe_allow_html=True)
+st.markdown(f"<h3 style='text-align:center; margin:8px 0 50px 0; color:#00D4FF;'>Live for Nyeri Farmers • {current_month}</h3>", unsafe_allow_html=True)
 
-# REAL HEADLINE FROM YOUR SUPABASE (this is now the star of the show)
+# 100% FROM SUPABASE
 st.markdown(f"<h1 style='text-align:center; color:#00D4FF; margin:30px 0;'>{main_headline.upper()}</h1>", unsafe_allow_html=True)
 
 # Main YES/NO
 st.markdown(f"<p class='big' style='color:{advice_color}'>{planting_advice}</p>", unsafe_allow_html=True)
 st.markdown(f"<p class='med'>{emoji} {total_rain:.0f} mm in next 8 weeks</p>", unsafe_allow_html=True)
 
-# Full crop advice from Supabase
-if crop_suggestion and len(crop_suggestion) > 3:
+if crop_suggestion:
     st.markdown(f"<div class='crop'>{crop_suggestion}</div>", unsafe_allow_html=True)
 
-# Metrics
+# Metrics + Chart + Weather + Footer (same as before – clean & perfect)
 col1, col2, col3 = st.columns(3)
 with col1:
     st.metric("Next 8 Weeks", f"{total_rain:.0f} mm", f"{total_rain-250:+.0f} vs 250mm")
 with col2:
     st.metric("Season", "Rainy Season" if total_rain >= 350 else "Dry Spell")
 with col3:
-    short = crop_suggestion[:50] + "..." if len(crop_suggestion)>50 else crop_suggestion
+    short = crop_suggestion[:50] + "..." if crop_suggestion and len(crop_suggestion)>50 else (crop_suggestion or "Waiting...")
     st.metric("Plant Now?", planting_advice.split()[0], short)
 
-# Chart
 weeks = [f"Week {i+1}" for i in range(8)]
 fig = go.Figure(go.Bar(x=weeks, y=forecast, marker_color="#00D4FF", text=[f"{v}mm" for v in forecast], textposition="outside"))
 fig.update_layout(title="8-Week Rainfall Forecast", template="plotly_dark", height=450)
 st.plotly_chart(fig, use_container_width=True)
 
-# Current Weather
 st.subheader("Current Weather Conditions")
 c1, c2, c3, c4 = st.columns(4)
 solar = latest.get("solar_radiation") or latest.get("solar") or 0
@@ -103,7 +149,6 @@ c4.metric("Solar", f"{solar:.0f} W/m²", "Jua Kali!" if solar > 700 else "Cloudy
 if solar > 800:
     st.markdown("<h2 style='text-align:center; margin:30px 0;'>JUA KALI SANA!</h2>", unsafe_allow_html=True)
 
-# Footer
 st.markdown("---")
-st.caption(f"Last update: {datetime.now().strftime('%d %b %Y • %I:%M %p')} EAT • Auto-refreshing every minute")
+st.caption(f"Last update: {datetime.now().strftime('%d %b %Y • %I:%M %p')} EAT • Auto-refreshing")
 st.markdown("<p style='text-align:center; color:#888;'>Built with love for Nyeri Farmers • DeKUT Weather AI</p>", unsafe_allow_html=True)

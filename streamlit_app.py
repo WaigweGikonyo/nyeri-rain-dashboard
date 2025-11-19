@@ -48,7 +48,12 @@ def get_data():
         return pd.DataFrame()
 
 df = get_data()
-if df.empty and st.error("No data yet") and st.stop()
+
+# Fixed line – this was the syntax error!
+if df.empty:
+    st.error("No weather data available yet – waiting for sensor...")
+    st.stop()
+
 latest = df.iloc[0]
 forecast = latest.get("forecast_weeks") or [0]*8
 total_rain = sum(forecast)
@@ -72,7 +77,7 @@ else:
 crop_suggestion = latest.get("crop_suggestions", "").strip()
 main_headline = crop_suggestion.split("\n", 1)[0].strip() if crop_suggestion else "Waiting for today’s advice..."
 
-# ───── SEND RICH EMAIL (only when needed ─────
+# ───── SEND RICH EMAIL ─────
 today = datetime.now().date()
 if "last_advice" not in st.session_state:
     st.session_state.last_advice = None
@@ -103,7 +108,7 @@ Built with love for Nyeri Farmers • DeKUT Weather AI
     if send_weekly:
         st.session_state.last_email_date = today
 
-# ───── GORGEOUS DASHBOARD WITH EMOJIS ─────
+# ───── BEAUTIFUL DASHBOARD WITH EMOJIS ─────
 st.markdown("""
 <style>
     .big {font-size:92px !important; font-weight:900; text-align:center; margin:15px 0;}
@@ -113,24 +118,16 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Header
 st.markdown("<h1 style='text-align:center; color:#00D4FF;'>Dedan Kimathi Rain AI</h1>", unsafe_allow_html=True)
 st.markdown(f"<h3 style='text-align:center; color:#00FFA3;'>Live for Nyeri Farmers • {datetime.now().strftime('%B %Y')}</h3>", unsafe_allow_html=True)
 
-# Main headline from Supabase
 st.markdown(f"<div class='headline'>{main_headline.upper()}</div>", unsafe_allow_html=True)
-
-# YES / NO with big emoji
 st.markdown(f"<div class='big' style='color:{advice_color};'>{advice_emoji}  {planting_advice}  {advice_emoji}</div>", unsafe_allow_html=True)
-
-# Rainfall total
 st.markdown(f"<div class='rain'>Rain {total_rain} mm in next 8 weeks</div>", unsafe_allow_html=True)
 
-# Full crop suggestion
 if crop_suggestion:
     st.markdown(f"<div class='detail'>{crop_suggestion}</div>", unsafe_allow_html=True)
 
-# Metrics
 col1, col2, col3 = st.columns(3)
 with col1:
     st.metric("Next 8 Weeks", f"{total_rain} mm", f"{total_rain-250:+.0f} vs target")
@@ -138,15 +135,13 @@ with col2:
     st.metric("Season", "Rainy Season" if total_rain >= 350 else "Dry Spell")
 with col3:
     short = crop_suggestion[:40] + "..." if crop_suggestion and len(crop_suggestion)>40 else (crop_suggestion or "—")
-    st.metric("Plant Now?", "YES" if "MAYBE" "NO", short)
+    st.metric("Plant Now?", "YES" if "YES" in planting_advice else ("MAYBE" if "Maybe" in planting_advice else "NO"), short)
 
-# Beautiful chart
 weeks = [f"Week {i+1}" for i in range(8)]
 fig = go.Figure(go.Bar(x=weeks, y=forecast, marker_color="#00D4FF", text=[f"{v}mm" for v in forecast], textposition="outside"))
 fig.update_layout(title="8-Week Rainfall Forecast", template="plotly_dark", height=520, font=dict(size=14))
 st.plotly_chart(fig, use_container_width=True)
 
-# Current weather
 st.markdown("### Current Weather")
 c1, c2, c3, c4 = st.columns(4)
 solar = latest.get("solar_radiation") or latest.get("solar") or 0
@@ -158,7 +153,6 @@ c4.metric("Solar", f"{solar:.0f} W/m²", "Hot Sun" if solar > 700 else "Cloudy")
 if solar > 800:
     st.markdown("<h2 style='text-align:center;'>Hot Sun JUA KALI SANA! Hot Sun</h2>", unsafe_allow_html=True)
 
-# Footer
 st.markdown("---")
 st.caption(f"Last update: {datetime.now().strftime('%d %B %Y • %I:%M %p')} EAT")
 st.markdown("<p style='text-align:center; color:#888; font-size:19px;'>Built with love for Nyeri Farmers • DeKUT Weather AI</p>", unsafe_allow_html=True)

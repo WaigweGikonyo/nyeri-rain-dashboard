@@ -96,7 +96,7 @@ Total rain (8 weeks): {total_rain:.0f} mm
 
 {crop_suggestion or "No recommendation yet"}
 
-Live Dashboard → https://your-app-name.streamlit.app
+Live Dashboard →https://nyeri-rain-dashboard-6nvsflctxyimknz7sactb3.streamlit.app/
     """.strip()
     send_email(f"NYERI RAIN AI • {planting_advice}", body)
     st.session_state.last_advice = planting_advice

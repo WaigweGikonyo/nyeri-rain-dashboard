@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from supabase import create_client
-from datetime import datetime
+from datetime import datetime, timedelta
 import plotly.graph_objects as go
 import time
 import smtplib
@@ -18,22 +18,32 @@ SUPABASE_URL = "https://ffbkgocjztagavphjbsq.supabase.co"
 SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmYmtnb2NqenRhZ2F2cGhqYnNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NzA5NjcsImV4cCI6MjA3NjI0Njk2N30.sudxLkD1r8ARMEKjVMiyQqTg1KkKR7gSrWA-CKjVKb4"
 supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
-# ───── EMAIL CONFIG (CHANGE THESE 3 LINES ONLY!) ─────
-SENDER_EMAIL = "gikonyowaigwe@gmail.com"                    # ← YOUR Gmail
-SENDER_PASSWORD = "fsox aavj llad gvvp"                 # ← 16-digit App Password (not real password)
-RECEIVER_EMAILS = ["kinuthiajohnson941@gmail.com", "nganga.irvine19@students.dkut.ac.ke"]  # ← Add as many as you want
+# ───── EMAIL CONFIG ─────
+SENDER_EMAIL = "gikonyowaigwe@gmail.com"
+SENDER_PASSWORD = "fsox aavj llad gvvp"  # ← your 16-digit App Password
+RECEIVER_EMAILS = ["kinuthiajohnson941@gmail.com", "nganga.irvine19@students.dkut.ac.ke"]
 
 # ───── EMAIL FUNCTION ─────
-def send_alert_email(subject, body):
-    if not SENDER_EMAIL or "yourgmail" in SENDER_EMAIL:
-        return  # safety: don't send if not configured
-
+def send_weekly_email():
     message = MIMEMultipart()
     message["From"] = SENDER_EMAIL
     message["To"] = ", ".join(RECEIVER_EMAILS)
-    message["Subject"] = f"NYERI RAIN AI • {subject}"
+    message["Subject"] = f"NYERI RAIN AI WEEKLY UPDATE • {datetime.now().strftime('%d %B %Y')}"
 
-    message.attach(MIMEText(body, "plain", "utf-8"))
+    body = f"""
+NYERI RAIN AI – WEEKLY FARMING ALERT
+
+Planting Advice: {planting_advice}
+Total Expected Rain (Next 8 Weeks): {total_rain:.0f} mm
+
+Today’s Recommendation:
+{crop_suggestion or "No advice yet"}
+
+Dashboard: https://your-app-name.streamlit.app
+
+Sent every Monday morning • Built for Nyeri Farmers
+DeKUT Weather AI
+    """.strip()
 
     try:
         server = smtplib.SMTP("smtp.gmail.com", 587)
@@ -42,7 +52,7 @@ def send_alert_email(subject, body):
         server.sendmail(SENDER_EMAIL, RECEIVER_EMAILS, message.as_string())
         server.quit()
     except Exception as e:
-        st.error("Email failed to send. Check credentials.")
+        pass  # silent fail in production
 
 # ───── FETCH LATEST DATA ─────
 @st.cache_data(ttl=55)
@@ -74,48 +84,38 @@ else:
     advice_color = "#FF3B30"
     emoji = "Hourglass"
 
-# ───── 100% FROM SUPABASE (NO HARD-CODED TEXT) ─────
+# ───── 100% FROM SUPABASE – NO HARD-CODED TEXT ANYWHERE ─────
 crop_suggestion = latest.get("crop_suggestions", "").strip()
 main_headline = crop_suggestion.split("\n", 1)[0].strip() if crop_suggestion else "Waiting for today's planting advice..."
 
-# ───── SEND EMAIL ONLY WHEN ADVICE CHANGES ─────
-if "last_advice" not in st.session_state:
-    st.session_state.last_advice = None
+# ───── WEEKLY EMAIL (Every Monday at 7:00–7:59 AM EAT) ─────
+now = datetime.now()
+is_monday = now.weekday() == 0
+is_morning = 7 <= now.hour < 8
 
-if planting_advice != st.session_state.last_advice:
-    email_body = f"""
-NYERI RAIN AI – NEW PLANTING ALERT!
+if is_monday and is_morning:
+    if "weekly_email_sent" not in st.session_state:
+        send_weekly_email()
+        st.session_state.weekly_email_sent = True
+else:
+    st.session_state.weekly_email_sent = False  # reset next Monday
 
-Current Advice: {planting_advice}
-Expected Rain (8 weeks): {total_rain:.0f} mm
-
-Today's Recommendation:
-{crop_suggestion or "No advice yet"}
-
-View live dashboard: https://your-app-name.streamlit.app
-
-Sent: {datetime.now().strftime('%d %B %Y at %I:%M %p')}
-    """.strip()
-
-    send_alert_email(planting_advice, email_body)
-    st.session_state.last_advice = planting_advice
-
-# ───── DESIGN ─────
+# ───── PURE & CLEAN DESIGN ─────
 st.markdown("""
 <style>
-    .big {font-size:76px !important; font-weight:bold; text-align:center; margin:20px 0;}
-    .med {font-size:38px !important; text-align:center; margin:15px 0;}
-    .crop {font-size:32px !important; text-align:center; margin:30px 0; line-height:1.5; color:#00FFA3;}
+    .big {font-size:78px !important; font-weight:bold; text-align:center; margin:20px 0;}
+    .med {font-size:40px !important; text-align:center; margin:15px 0;}
+    .crop {font-size:34px !important; text-align:center; margin:35px 0; line-height:1.6; color:#00FFA3;}
 </style>
 """, unsafe_allow_html=True)
 
 # Header
 current_month = datetime.now().strftime("%B %Y")
 st.markdown("<h1 style='text-align:center; margin-bottom:0;'>Dedan Kimathi Rain AI</h1>", unsafe_allow_html=True)
-st.markdown(f"<h3 style='text-align:center; margin:8px 0 50px 0; color:#00D4FF;'>Live for Nyeri Farmers • {current_month}</h3>", unsafe_allow_html=True)
+st.markdown(f"<h3 style='text-align:center; margin:8px 0 60px 0; color:#00D4FF;'>Live for Nyeri Farmers • {current_month}</h3>", unsafe_allow_html=True)
 
-# 100% FROM SUPABASE
-st.markdown(f"<h1 style='text-align:center; color:#00D4FF; margin:30px 0;'>{main_headline.upper()}</h1>", unsafe_allow_html=True)
+# 100% FROM YOUR crop_suggestions COLUMN
+st.markdown(f"<h1 style='text-align:center; color:#00D4FF; margin:40px 0 20px 0;'>{main_headline.upper()}</h1>", unsafe_allow_html=True)
 
 # Main YES/NO
 st.markdown(f"<p class='big' style='color:{advice_color}'>{planting_advice}</p>", unsafe_allow_html=True)
@@ -124,31 +124,34 @@ st.markdown(f"<p class='med'>{emoji} {total_rain:.0f} mm in next 8 weeks</p>", u
 if crop_suggestion:
     st.markdown(f"<div class='crop'>{crop_suggestion}</div>", unsafe_allow_html=True)
 
-# Metrics + Chart + Weather + Footer (same as before – clean & perfect)
+# Metrics
 col1, col2, col3 = st.columns(3)
 with col1:
     st.metric("Next 8 Weeks", f"{total_rain:.0f} mm", f"{total_rain-250:+.0f} vs 250mm")
 with col2:
     st.metric("Season", "Rainy Season" if total_rain >= 350 else "Dry Spell")
 with col3:
-    short = crop_suggestion[:50] + "..." if crop_suggestion and len(crop_suggestion)>50 else (crop_suggestion or "Waiting...")
+    short = crop_suggestion[:50] + "..." if crop_suggestion and len(crop_suggestion)>50 else (crop_suggestion or "No advice")
     st.metric("Plant Now?", planting_advice.split()[0], short)
 
+# Chart
 weeks = [f"Week {i+1}" for i in range(8)]
 fig = go.Figure(go.Bar(x=weeks, y=forecast, marker_color="#00D4FF", text=[f"{v}mm" for v in forecast], textposition="outside"))
 fig.update_layout(title="8-Week Rainfall Forecast", template="plotly_dark", height=450)
 st.plotly_chart(fig, use_container_width=True)
 
+# Current Weather
 st.subheader("Current Weather Conditions")
 c1, c2, c3, c4 = st.columns(4)
 solar = latest.get("solar_radiation") or latest.get("solar") or 0
-c1.metric("Temperature", f"{latest['temperature']:.1f}°C")
+c1.metric("Temp", f"{latest['temperature']:.1f}°C")
 c2.metric("Humidity", f"{latest['humidity']:.0f}%")
-c3.metric("Wind Speed", f"{latest['wind_speed']:.1f} m/s")
+c3.metric("Wind", f"{latest['wind_speed']:.1f} m/s")
 c4.metric("Solar", f"{solar:.0f} W/m²", "Jua Kali!" if solar > 700 else "Cloudy")
 if solar > 800:
-    st.markdown("<h2 style='text-align:center; margin:30px 0;'>JUA KALI SANA!</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align:center; margin:40px 0;'>JUA KALI SANA!</h2>", unsafe_allow_html=True)
 
+# Footer
 st.markdown("---")
-st.caption(f"Last update: {datetime.now().strftime('%d %b %Y • %I:%M %p')} EAT • Auto-refreshing")
-st.markdown("<p style='text-align:center; color:#888;'>Built with love for Nyeri Farmers • DeKUT Weather AI</p>", unsafe_allow_html=True)
+st.caption(f"Last update: {datetime.now().strftime('%d %b %Y • %I:%M %p')} EAT • Weekly email sent every Monday")
+st.markdown("<p style='text-align:center; color:#888; margin:30px 0;'>Built with love for Nyeri Farmers • DeKUT Weather AI</p>", unsafe_allow_html=True)

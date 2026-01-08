@@ -16,7 +16,7 @@ st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-    .hero-card { padding: 50px; border-radius: 30px; text-align: center; margin-bottom: 40px; border: 1px solid rgba(255, 255, 255, 0.2); box-shadow: 0 20px 40px rgba(0,0,0,0.1); transition: 0.3s; }
+    .hero-card { padding: 50px; border-radius: 30px; text-align: center; margin-bottom: 40px; border: 1px solid rgba(255, 255, 255, 0.2); box-shadow: 0 20px 40px rgba(0,0,0,0.1); }
     .card-temp { background: linear-gradient(135deg, rgba(255,111,0,0.1), rgba(255,204,128,0.1)); border: 1px solid #FF6F00; padding: 20px; border-radius: 20px; text-align: center; }
     .card-hum { background: linear-gradient(135deg, rgba(0,145,234,0.1), rgba(129,212,250,0.1)); border: 1px solid #0091EA; padding: 20px; border-radius: 20px; text-align: center; }
     .card-wind { background: linear-gradient(135deg, rgba(0,200,83,0.1), rgba(185,246,202,0.1)); border: 1px solid #00C853; padding: 20px; border-radius: 20px; text-align: center; }
@@ -41,17 +41,14 @@ def send_nyeri_alert(label, advice, rain_total, emoji):
         msg["From"] = f"Nyeri Weather AI <{SENDER_EMAIL}>"
         msg["To"] = ", ".join(RECEIVERS)
         msg["Subject"] = f"{emoji} WEATHER ALERT: {label}"
-        body = f"📍 NYERI WEATHER AI UPDATE\nStatus: {label} {emoji}\nRain: {rain_total:.1f}mm\n\nAdvice: {advice}"
+        body = f"📍 NYERI WEATHER AI\nStatus: {label} {emoji}\nRain: {rain_total:.1f}mm\n\nAdvice: {advice}"
         msg.attach(MIMEText(body, "plain"))
         server = smtplib.SMTP("smtp.gmail.com", 587)
         server.starttls(); server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.send_message(msg); server.quit()
-    except Exception as e: st.sidebar.error(f"Email failed: {e}")
+    except Exception as e: st.sidebar.error(f"Email sync error")
 
-# ───── 3. DATA FETCH (FIXED FOR STRINGS/NULLS) ─────
-if st.sidebar.button("🔄 Sync Table Now"):
-    st.cache_data.clear()
-
+# ───── 3. DATA FETCH (ACTIVE SYNC) ─────
 @st.cache_data(ttl=2)
 def fetch_active_data():
     try:
@@ -61,27 +58,35 @@ def fetch_active_data():
 
 df = fetch_active_data()
 if df.empty:
-    st.warning("🛰️ Initializing Satellite Link...")
+    st.info("🛰️ Initializing Satellite Link... Please refresh.")
     st.stop()
 
 latest = df.iloc[0]
 
-# --- Extract & Repair Data ---
-ai_label = str(latest.get("season_label") or "Updating...")
-# If suggestions are null, use a neutral station message
-ai_advice = latest.get("crop_suggestions") if latest.get("crop_suggestions") else "Monitoring Dedan Kimathi Station feed..."
+# ───── 4. DATA REPAIR & LOGIC ─────
+# Priority 1: Use exactly what the database says for the label
+ai_label = str(latest.get("season_label", "Updating..."))
 
-# Fix the string vs list issue for forecast
+# Priority 2: Only show suggestions if they exist, else empty string
+ai_advice = latest.get("crop_suggestions") if latest.get("crop_suggestions") else ""
+
+# Priority 3: Fix forecast parsing (string to list)
 raw_f = latest.get("forecast_weeks")
-if isinstance(raw_f, str):
-    try: forecast = [float(x) for x in json.loads(raw_f)]
-    except: forecast = [0.0]*8
-else:
-    forecast = [float(x) for x in raw_f] if isinstance(raw_f, list) else [0.0]*8
+forecast = [0.0] * 8
+try:
+    if isinstance(raw_f, str):
+        forecast = [float(x) for x in json.loads(raw_f.replace("'", '"'))]
+    elif isinstance(raw_f, list):
+        forecast = [float(x) for x in raw_f]
+except: pass
 
-total_rain = float(latest.get("total_8week_rain") or sum(forecast))
+# Priority 4: Safe math for Total Rain
+try:
+    total_rain = float(latest.get("total_8week_rain", sum(forecast)))
+except:
+    total_rain = 0.0
 
-# Emoji & Theme Logic (Synced to AI Label)
+# Priority 5: DIVERSIFIED THEME (Strictly based on ai_label)
 if "Rainy" in ai_label:
     emoji, color, bg_alpha = "🌧️", "#00E676", "rgba(0, 230, 118, 0.1)"
 elif "Dry" in ai_label:
@@ -89,15 +94,11 @@ elif "Dry" in ai_label:
 else:
     emoji, color, bg_alpha = "⛅", "#FFD740", "rgba(255, 215, 64, 0.1)"
 
-if "last_broadcast" not in st.session_state: st.session_state.last_broadcast = None
-if st.session_state.last_broadcast != ai_label:
-    send_nyeri_alert(ai_label, ai_advice, total_rain, emoji)
-    st.session_state.last_broadcast = ai_label
-
-# ───── 4. UI DISPLAY ─────
+# ───── 5. UI DISPLAY ─────
 st.markdown("<h1 style='text-align: center; font-size: 85px; font-weight: 900; color: #00D4FF; margin-bottom: 0;'>NYERI WEATHER AI</h1>", unsafe_allow_html=True)
-st.markdown(f"<p style='text-align: center; color: #888; font-weight: 600;'>STATION SYNCED AT: {latest['timestamp']}</p>", unsafe_allow_html=True)
+st.markdown(f"<p style='text-align: center; color: #888; font-weight: 600;'>STATION SYNCED AT: {latest.get('timestamp')}</p>", unsafe_allow_html=True)
 
+# Main Hero Card (Flowing Downwards)
 st.markdown(f"""
     <div class="hero-card" style="background-color: {bg_alpha}; border-top: 15px solid {color};">
         <span style="font-size: 80px;">{emoji}</span>
@@ -107,6 +108,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 st.write("---")
+
 col_graph, col_stats = st.columns([2, 1])
 with col_graph:
     fig = go.Figure(go.Scatter(x=[f"Wk {i+1}" for i in range(8)], y=forecast, fill='tozeroy', line=dict(color='#00D4FF', width=5), mode='lines+markers'))
@@ -121,13 +123,20 @@ with col_stats:
 st.write("---")
 st.markdown("<h3 style='text-align: center; font-weight: 800;'>📍 LIVE STATION FEED</h3>", unsafe_allow_html=True)
 m1, m2, m3, m4, m5 = st.columns(5)
-with m1: st.markdown(f"<div class='card-temp'>🌡️<br><small>TEMP</small><br><h2>{latest['temperature']}°C</h2></div>", unsafe_allow_html=True)
-with m2: st.markdown(f"<div class='card-hum'>💧<br><small>HUMIDITY</small><br><h2>{latest['humidity']}%</h2></div>", unsafe_allow_html=True)
-with m3: st.markdown(f"<div class='card-wind'>🌬️<br><small>WIND</small><br><h2>{latest['wind_speed']} m/s</h2></div>", unsafe_allow_html=True)
-with m4: st.markdown(f"<div class='card-solar'>☀️<br><small>SOLAR</small><br><h2>{latest['solar_radiation']} W/m²</h2></div>", unsafe_allow_html=True)
-with m5: st.markdown(f"<div class='card-rain'>🌧️<br><small>RAIN</small><br><h2>{latest['precipitation']} mm</h2></div>", unsafe_allow_html=True)
+with m1: st.markdown(f"<div class='card-temp'>🌡️<br><small>TEMP</small><br><h2>{latest.get('temperature', 0)}°C</h2></div>", unsafe_allow_html=True)
+with m2: st.markdown(f"<div class='card-hum'>💧<br><small>HUMIDITY</small><br><h2>{latest.get('humidity', 0)}%</h2></div>", unsafe_allow_html=True)
+with m3: st.markdown(f"<div class='card-wind'>🌬️<br><small>WIND</small><br><h2>{latest.get('wind_speed', 0)} m/s</h2></div>", unsafe_allow_html=True)
+with m4: st.markdown(f"<div class='card-solar'>☀️<br><small>SOLAR</small><br><h2>{latest.get('solar_radiation', 0)} W/m²</h2></div>", unsafe_allow_html=True)
+with m5: st.markdown(f"<div class='card-rain'>🌧️<br><small>RAIN</small><br><h2>{latest.get('precipitation', 0)} mm</h2></div>", unsafe_allow_html=True)
 
 st.markdown("<div class='footer'>MADE FOR NYERI FARMERS WITH LOVE ❤️</div>", unsafe_allow_html=True)
 
+# Email Logic (Only triggers if season changed in DB)
+if "last_broadcast" not in st.session_state: st.session_state.last_broadcast = None
+if st.session_state.last_broadcast != ai_label:
+    send_nyeri_alert(ai_label, ai_advice, total_rain, emoji)
+    st.session_state.last_broadcast = ai_label
+
+# Auto-refresh
 time.sleep(60)
 st.rerun()

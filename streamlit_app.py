@@ -1,172 +1,122 @@
 import streamlit as st
 import pandas as pd
+import plotly.graph_objects as go
 from supabase import create_client
 from datetime import datetime
-import plotly.graph_objects as go
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-# ───── CONFIG ─────
-st.set_page_config(page_title="Nyeri Rain AI", layout="centered")
-st.markdown("<meta http-equiv='refresh' content='60'>", unsafe_allow_html=True)
+# ───── 1. PAGE CONFIG (Adaptable Theme) ─────
+st.set_page_config(page_title="Nyeri Rain AI", layout="wide", page_icon="🌱")
 
+# ───── 2. CONNECTIONS ─────
 SUPABASE_URL = "https://ffbkgocjztagavphjbsq.supabase.co"
-SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmYmtnb2NqenRhZ2F2cGhqYnNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NzA5NjcsImV4cCI6MjA3NjI0Njk2N30.sudxLkD1r8ARMEKjVMiyQqTg1KkKR7gSrWA-CKjVKb4"
-supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmYmtnb2NqenRhZ2F2cGhqYnNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NzA5NjcsImV4cCI6MjA3NjI0Njk2N30.sudxLkD1r8ARMEKjVMiyQqTg1KkKR7gSrWA-CKjVKb4" 
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-DASHBOARD_URL = "https://nyeri-rain-dashboard-6nvsflctxyimknz7sactb3.streamlit.app"
-
-# ───── EMAIL CONFIG ─────
+# Email Config
 SENDER_EMAIL = "gikonyowaigwe@gmail.com"
 SENDER_PASSWORD = "fsox aavj llad gvvp"
 RECEIVERS = ["kinuthiajohnson941@gmail.com", "nganga.irvine19@students.dkut.ac.ke"]
 
-def send_email(subject, body):
+# ───── 3. FUNCTIONS ─────
+def send_alert_email(status, rain_total, advice):
     try:
         msg = MIMEMultipart()
         msg["From"] = SENDER_EMAIL
         msg["To"] = ", ".join(RECEIVERS)
-        msg["Subject"] = subject
-        msg.attach(MIMEText(body, "plain", "utf-8"))
+        msg["Subject"] = f"🌱 NYERI RAIN AI: {status}"
+        
+        body = f"""
+        NYERI RAIN AI UPDATE
+        ------------------------------
+        Status: {status}
+        8-Week Total: {rain_total:.1f} mm
+        
+        Recommendation:
+        {advice}
+        
+        Check Live Dashboard: https://nyeri-rain-dashboard.streamlit.app
+        """
+        msg.attach(MIMEText(body, "plain"))
         server = smtplib.SMTP("smtp.gmail.com", 587)
         server.starttls()
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
-        server.sendmail(SENDER_EMAIL, RECEIVERS, msg.as_string())
+        server.send_message(msg)
         server.quit()
-    except:
-        pass
+    except Exception as e:
+        st.sidebar.error(f"Email failed: {e}")
 
-# ───── FETCH DATA ─────
-@st.cache_data(ttl=55)
-def get_data():
-    try:
-        res = supabase.table("weather_data").select("*").order("timestamp", desc=True).limit(1).execute()
-        return pd.DataFrame(res.data)
-    except:
-        return pd.DataFrame()
+@st.cache_data(ttl=60)
+def fetch_data():
+    res = supabase.table("weather_data").select("*").order("timestamp", desc=True).limit(1).execute()
+    return pd.DataFrame(res.data)
 
-df = get_data()
+# ───── 4. DATA PROCESSING ─────
+df = fetch_data()
 
-# ───── BEAUTIFUL WAITING SCREEN (when no data) ─────
 if df.empty:
-    st.markdown("""
-    <div style="text-align:center; padding-top:120px;">
-        <h1 style="font-size:68px; font-weight:900; color:#00F0FF; margin:0;">
-            Nyeri Rain AI
-        </h1>
-        <p style="font-size:28px; color:#BBBBBB; margin:20px 0 100px 0;">
-            Live for Nyeri Farmers
-        </p>
-        <h2 style="font-size:56px; font-weight:900; color:#00FF88;">
-            Waiting for Sensor...
-        </h2>
-        <p style="font-size:26px; color:#888888; margin-top:30px;">
-            Data will appear automatically when the weather station<br>sends the next update
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.info("🛰️ Connecting to DeKUT Weather Station... Please wait.")
     st.stop()
 
 latest = df.iloc[0]
-forecast = latest.get("forecast_weeks") or [0]*8
+forecast = latest.get("forecast_weeks") or [0.0]*8
 total_rain = sum(forecast)
+rainy_weeks = sum(1 for x in forecast if x > 30)
 
-# ───── PLANTING ADVICE ─────
-good_weeks = sum(1 for r in forecast if r >= 50)
-if total_rain >= 400 and good_weeks >= 4:
-    answer = "YES! Panda Sasa!"
-    color = "#00FF41"
-    subtext = f"Perfect rains ahead → {total_rain:.0f} mm"
-elif total_rain >= 300:
-    answer = "Maybe – Jaribu Tu"
-    color = "#FFB800"
-    subtext = f"{total_rain:.0f} mm – okay for some crops"
+# ───── 5. DECISION ENGINE ─────
+if total_rain > 350 and rainy_weeks >= 4:
+    decision, color = "YES! PANDA SASA", "#28a745" # Green
+    advice = "Consistent rains expected. Ideal for Maize (H6213) and Potatoes."
+elif total_rain > 200:
+    decision, color = "JARIBU TU (CAUTION)", "#ffc107" # Amber
+    advice = "Rains are erratic. Use fast-maturing seeds (e.g., Beans/Shangi)."
 else:
-    answer = "NO – Subiri Kidogo"
-    color = "#FF3B30"
-    subtext = f"Only {total_rain:.0f} mm – mvua bado kidogo"
+    decision, color = "HAPANA (SUBIRI)", "#dc3545" # Red
+    advice = "Dry spell detected. Irrigation required for Tetu crops."
 
-# FROM SUPABASE
-crop_full = str(latest.get("crop_suggestions", "No crop recommendation yet")).strip()
-main_crop_line = crop_full.split("\n", 1)[0].strip() if "\n" in crop_full else crop_full
+# ───── 6. EMAIL LOGIC (State Tracking) ─────
+if "last_status" not in st.session_state:
+    st.session_state.last_status = None
 
-# ───── EMAIL (NEVER BLANK) ─────
-today = datetime.now().date()
-if "last_answer" not in st.session_state:
-    st.session_state.last_answer = None
-    st.session_state.last_email_date = None
+if st.session_state.last_status != decision:
+    send_alert_email(decision, total_rain, advice)
+    st.session_state.last_status = decision
 
-changed = answer != st.session_state.last_answer
-monday = today.weekday() == 0
+# ───── 7. UI LAYOUT (Adaptable Colors) ─────
+st.title("🚜 Nyeri Rain AI")
+st.write(f"**Last Sync:** {latest['timestamp']}")
 
-if changed or (monday and st.session_state.last_email_date != today):
-    email_body = f"""
-NYERI RAIN AI UPDATE • {datetime.now().strftime('%d %b %Y')}
-
-{answer}
-
-{subtext}
-
-Today’s recommendation:
-{crop_full}
-
-Live Dashboard → {DASHBOARD_URL}
-
-Sent: {datetime.now().strftime('%I:%M %p')} EAT
-Built with love for Nyeri Farmers • DeKUT Weather AI
-    """.strip()
-
-    send_email(f"NYERI RAIN AI • {answer}", email_body)
-    st.session_state.last_answer = answer
-    if monday:
-        st.session_state.last_email_date = today
-
-# ───── GORGEOUS DESIGN ─────
-st.markdown("""
-<style>
-    .big-font   {font-size:72px !important; font-weight:900; text-align:center; margin:10px 0;}
-    .medium-font {font-size:34px !important; text-align:center; margin:15px 0 50px 0;}
-    .subtitle    {font-size:28px !important; text-align:center; color:#AAAAAA; margin-bottom:40px;}
-</style>
+# Summary Card
+st.markdown(f"""
+    <div style="background-color: {color}; padding: 20px; border-radius: 10px; color: white; text-align: center;">
+        <h1 style="margin:0;">{decision}</h1>
+        <p style="font-size: 1.2rem;">{advice}</p>
+    </div>
 """, unsafe_allow_html=True)
 
-st.markdown("<h1 style='text-align:center;'>Dedan Kimathi Rain AI</h1>", unsafe_allow_html=True)
-st.markdown(f"<h3 class='subtitle'>Live for Nyeri Farmers • {datetime.now().strftime('%B %Y')}</h3>", unsafe_allow_html=True)
-st.markdown(f"<h1 style='text-align:center; color:#00D4FF;'>{main_crop_line.upper()}</h1>", unsafe_allow_html=True)
+st.write("---")
 
-st.markdown(f"<p class='big-font' style='color:{color}'>{answer}</p>", unsafe_allow_html=True)
-st.markdown(f"<p class='medium-font' style='color:white;'>{subtext}</p>", unsafe_allow_html=True)
+# Metrics
+c1, c2, c3 = st.columns(3)
+c1.metric("8-Week Forecast", f"{total_rain:.1f} mm")
+c2.metric("Rainy Week Count", f"{rainy_weeks} weeks")
+c3.metric("Station Temp", f"{latest['temperature']}°C")
 
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric("Next 8 Weeks", f"{total_rain:.0f} mm", delta=f"{total_rain-250:+.0f} vs 250mm")
-with col2:
-    st.metric("Season", "Rainy Season" if total_rain >= 350 else "Dry Season")
-with col3:
-    st.metric("Plant Now?", answer.split("!")[0], delta=subtext)
-
-weeks = [f"Week {i+1}" for i in range(8)]
-fig = go.Figure(go.Bar(x=weeks, y=forecast, marker_color="#00D4FF",
-                       text=[f"{v}mm" for v in forecast], textposition="outside"))
-fig.update_layout(title="8-Week Rainfall Forecast", template="plotly_dark",
-                  height=460, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
-                  font=dict(color="white"))
+# Visuals (Using 'None' for template lets it adapt to Phone settings)
+fig = go.Figure(data=[go.Bar(x=[f"Wk {i+1}" for i in range(8)], y=forecast, marker_color='#007bff')])
+fig.update_layout(
+    title="Rainfall Pulse",
+    template=None, 
+    paper_bgcolor='rgba(0,0,0,0)',
+    plot_bgcolor='rgba(0,0,0,0)',
+)
 st.plotly_chart(fig, use_container_width=True)
 
-st.subheader("Current Conditions in Nyeri")
-c1, c2, c3, c4 = st.columns(4)
-solar = latest.get('solar_radiation') or latest.get('solar') or 0
-c1.metric("Temperature", f"{latest['temperature']:.1f}°C")
-c2.metric("Humidity", f"{latest['humidity']:.0f}%")
-c3.metric("Wind Speed", f"{latest['wind_speed']:.1f} m/s")
-c4.metric("Solar Radiation", f"{solar:.0f} W/m²", "Sunny!" if solar > 600 else "Cloudy")
-
-if solar > 800:
-    st.markdown("<h2 style='text-align:center; color:#FFD700;'>JUA KALI SANA!</h2>", unsafe_allow_html=True)
-elif solar > 400:
-    st.markdown("<h3 style='text-align:center; color:#FFEB3B;'>Jua Poa</h3>", unsafe_allow_html=True)
-
-st.markdown("---")
-st.caption(f"Last updated: {datetime.now().strftime('%d %b %Y • %I:%M %p')} • Powered by Dedan Kimathi University Weather Station")
-st.markdown("<p style='text-align:center; color:#888;'>Built with love for Nyeri Farmers</p>", unsafe_allow_html=True)
+# Sensor Grid
+st.subheader("Micro-Climate Data")
+colA, colB, colC = st.columns(3)
+colA.metric("Humidity", f"{latest['humidity']}%")
+colB.metric("Wind Speed", f"{latest.get('wind_speed', 0)} m/s")
+colC.metric("Solar Radiation", f"{latest.get('solar_radiation', 0)} W/m²")

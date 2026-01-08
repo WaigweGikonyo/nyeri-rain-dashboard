@@ -44,45 +44,49 @@ def send_nyeri_alert(label, advice, rain_total, emoji):
         body = f"📍 NYERI WEATHER AI\nStatus: {label}\nRain Prediction: {rain_total:.1f}mm\n\nAdvice: {advice}"
         msg.attach(MIMEText(body, "plain"))
         server = smtplib.SMTP("smtp.gmail.com", 587)
-        server.starttls()
-        server.login(SENDER_EMAIL, SENDER_PASSWORD)
-        server.send_message(msg)
-        server.quit()
+        server.starttls(); server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        server.send_message(msg); server.quit()
     except: pass
 
 # ───── 3. DATA FETCHING ─────
 @st.cache_data(ttl=2)
 def fetch_active_data():
     try:
+        # This is the line that actually reads from your Supabase table
         res = supabase.table("weather_data").select("*").order("timestamp", desc=True).limit(1).execute()
         return res.data[0] if res.data else None
-    except: return None
+    except Exception as e:
+        st.sidebar.error(f"Supabase Error: {e}")
+        return None
 
 raw_data = fetch_active_data()
 
-if not raw_data:
-    st.info("🛰️ Initializing Satellite Link... Please refresh.")
+# --- SIDEBAR DEBUGGER ---
+st.sidebar.title("🛠️ Station Debugger")
+if raw_data:
+    st.sidebar.success("✅ Connected to Supabase")
+    st.sidebar.write("**Last Raw JSON:**")
+    st.sidebar.json(raw_data)
+else:
+    st.sidebar.error("❌ No data found in table")
+    st.info("🛰️ Waiting for Station Data... Check your background script.")
     st.stop()
 
-# ───── 4. DATA SANITIZER (The Brainstormed Fix) ─────
+# ───── 4. DATA SANITIZER ─────
 def sanitize(val, dtype=float, default=0.0):
-    """Ensures data is never None or a broken string."""
     if val is None: return default
-    try:
-        return dtype(val)
-    except:
-        return default
+    try: return dtype(val)
+    except: return default
 
-# Parse Forecast Safely
+# Forecast Parsing
 forecast = [0.0] * 8
 f_raw = raw_data.get("forecast_weeks")
-if f_raw:
-    try:
-        if isinstance(f_raw, str):
-            forecast = [float(x) for x in json.loads(f_raw.replace("'", '"'))]
-        else:
-            forecast = [float(x) for x in f_raw]
-    except: pass
+try:
+    if isinstance(f_raw, str):
+        forecast = [float(x) for x in json.loads(f_raw.replace("'", '"'))]
+    elif isinstance(f_raw, list):
+        forecast = [float(x) for x in f_raw]
+except: pass
 
 # Map sanitized variables
 temp = sanitize(raw_data.get("temperature"))
@@ -107,7 +111,7 @@ else:
 
 # ───── 5. UI DISPLAY ─────
 st.markdown(f"<h1 style='text-align: center; font-size: 85px; font-weight: 900; color: #00D4FF; margin-bottom: 0;'>NYERI WEATHER AI</h1>", unsafe_allow_html=True)
-st.markdown(f"<p style='text-align: center; color: #888; font-weight: 600;'>STATION SYNCED: {raw_data.get('timestamp', 'Live')}</p>", unsafe_allow_html=True)
+st.markdown(f"<p style='text-align: center; color: #888; font-weight: 600;'>STATION SYNCED: {raw_data.get('timestamp')}</p>", unsafe_allow_html=True)
 
 st.markdown(f"""
     <div class="hero-card" style="background-color: {bg_alpha}; border-top: 15px solid {color};">
@@ -147,5 +151,6 @@ if st.session_state.last_broadcast != ai_label:
     send_nyeri_alert(ai_label, ai_advice, total_rain, emoji)
     st.session_state.last_broadcast = ai_label
 
-time.sleep(60)
+# Fast refresh for testing
+time.sleep(10)
 st.rerun()

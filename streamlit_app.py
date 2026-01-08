@@ -92,7 +92,7 @@ with m2: st.markdown(f"<div class='card-metric' style='border: 1px solid #0091EA
 with m3: st.markdown(f"<div class='card-metric' style='border: 1px solid #00C853;'><span>🌬️</span><small>Wind</small><h2>{sanitize(raw_data.get('wind_speed'))}m/s</h2></div>", unsafe_allow_html=True)
 with m4: st.markdown(f"<div class='card-metric' style='border: 1px solid #FFD600;'><span>☀️</span><small>Solar</small><h2>{sanitize(raw_data.get('solar_radiation'))}W/m²</h2></div>", unsafe_allow_html=True)
 with m5: st.markdown(f"<div class='card-metric' style='border: 1px solid #AB47BC;'><span>🌧️</span><small>Rain</small><h2>{sanitize(raw_data.get('precipitation'))}mm</h2></div>", unsafe_allow_html=True)
-
+st.markdown("<div class='footer'>MADE FOR NYERI FARMERS WITH LOVE ❤️</div>", unsafe_allow_html=True)
 st.sidebar.write(f"✅ Syncing ID: {raw_data.get('id')}")
 
 time.sleep(10)

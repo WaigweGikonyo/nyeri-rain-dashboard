@@ -37,7 +37,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # EMAIL SETTINGS
 SENDER_EMAIL = "gikonyowaigwe@gmail.com"
 SENDER_PASSWORD = "fsox aavj llad gvvp" 
-RECEIVERS = ["kinuthiajohnson941@gmail.com", "nganga.irvine19@students.dkut.ac.ke"]
+RECEIVERS = ["kinuthiajohnson941@gmail.com", "nganga.irvine19@students.dkut.ac.ke","gikonyo.joy21@students.dkut.ac.ke"]
 
 def send_weather_email(label, advice, rain_total, emoji):
     try:

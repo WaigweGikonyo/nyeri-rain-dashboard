@@ -41,7 +41,7 @@ st.markdown("""
 
 # ───── 2. SECURE DATA FETCH ─────
 SUPABASE_URL = "https://ffbkgocjztagavphjbsq.supabase.co"
-SUPABASE_KEY = "YOUR_ANON_KEY" # Use your project's Anon Key
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmYmtnb2NqenRhZ2F2cGhqYnNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NzA5NjcsImV4cCI6MjA3NjI0Njk2N30.sudxLkD1r8ARMEKjVMiyQqTg1KkKR7gSrWA-CKjVKb4" # Use your project's Anon Key
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 @st.cache_data(ttl=30)

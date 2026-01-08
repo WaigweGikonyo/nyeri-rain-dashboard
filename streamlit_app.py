@@ -6,6 +6,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
+import json
 import time
 
 # ───── 1. DESIGN & PAGE CONFIG ─────
@@ -25,88 +26,77 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ───── 2. CONNECTIONS & CONFIG ─────
+# ───── 2. CONNECTIONS ─────
 SUPABASE_URL = "https://ffbkgocjztagavphjbsq.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmYmtnb2NqenRhZ2F2cGhqYnNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NzA5NjcsImV4cCI6MjA3NjI0Njk2N30.sudxLkD1r8ARMEKjVMiyQqTg1KkKR7gSrWA-CKjVKb4" 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Email Settings
 SENDER_EMAIL = "gikonyowaigwe@gmail.com"
 SENDER_PASSWORD = "fsox aavj llad gvvp" 
 RECEIVERS = ["kinuthiajohnson941@gmail.com", "nganga.irvine19@students.dkut.ac.ke"]
 
-# ───── 3. SMART EMAIL LOGIC ─────
 def send_nyeri_alert(label, advice, rain_total, emoji):
     try:
         msg = MIMEMultipart()
         msg["From"] = f"Nyeri Weather AI <{SENDER_EMAIL}>"
         msg["To"] = ", ".join(RECEIVERS)
         msg["Subject"] = f"{emoji} WEATHER ALERT: {label}"
-        body = f"""📍 NYERI WEATHER AI UPDATE\nStatus: {label} {emoji}\nRain: {rain_total:.1f}mm\n\nAdvice: {advice}"""
+        body = f"📍 NYERI WEATHER AI UPDATE\nStatus: {label} {emoji}\nRain: {rain_total:.1f}mm\n\nAdvice: {advice}"
         msg.attach(MIMEText(body, "plain"))
         server = smtplib.SMTP("smtp.gmail.com", 587)
-        server.starttls()
-        server.login(SENDER_EMAIL, SENDER_PASSWORD)
-        server.send_message(msg)
-        server.quit()
-    except Exception as e:
-        st.sidebar.error(f"Email failed: {e}")
+        server.starttls(); server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        server.send_message(msg); server.quit()
+    except Exception as e: st.sidebar.error(f"Email failed: {e}")
 
-# ───── 4. ACTIVE DATA SYNC (The "No-Incorrect-Data" Logic) ─────
-
-# Force Refresh Button
+# ───── 3. DATA FETCH (FIXED FOR STRINGS/NULLS) ─────
 if st.sidebar.button("🔄 Sync Table Now"):
     st.cache_data.clear()
 
-# Use a very short TTL (2 seconds) to ensure the table is read actively
 @st.cache_data(ttl=2)
 def fetch_active_data():
     try:
-        # Fetching the absolute latest row by timestamp
         res = supabase.table("weather_data").select("*").order("timestamp", desc=True).limit(1).execute()
         return pd.DataFrame(res.data)
-    except Exception as e:
-        return pd.DataFrame()
+    except: return pd.DataFrame()
 
 df = fetch_active_data()
-
 if df.empty:
-    st.warning("⚠️ Searching for latest station data... Ensure your Python script is pushing data.")
+    st.warning("🛰️ Initializing Satellite Link...")
     st.stop()
 
 latest = df.iloc[0]
 
-# --- Extract Data ---
+# --- Extract & Repair Data ---
 ai_label = str(latest.get("season_label") or "Updating...")
-ai_advice = str(latest.get("crop_suggestions") or "Calculating farmer advice...")
+# If suggestions are null, use a neutral station message
+ai_advice = latest.get("crop_suggestions") if latest.get("crop_suggestions") else "Monitoring Dedan Kimathi Station feed..."
+
+# Fix the string vs list issue for forecast
 raw_f = latest.get("forecast_weeks")
-forecast = [float(x) for x in raw_f] if isinstance(raw_f, list) else [0.0]*8
+if isinstance(raw_f, str):
+    try: forecast = [float(x) for x in json.loads(raw_f)]
+    except: forecast = [0.0]*8
+else:
+    forecast = [float(x) for x in raw_f] if isinstance(raw_f, list) else [0.0]*8
+
 total_rain = float(latest.get("total_8week_rain") or sum(forecast))
 
-# Emoji & Theme Logic
+# Emoji & Theme Logic (Synced to AI Label)
 if "Rainy" in ai_label:
     emoji, color, bg_alpha = "🌧️", "#00E676", "rgba(0, 230, 118, 0.1)"
-elif "Dry" in ai_label or "Drought" in ai_label:
+elif "Dry" in ai_label:
     emoji, color, bg_alpha = "☀️", "#FF5252", "rgba(255, 82, 82, 0.1)"
 else:
     emoji, color, bg_alpha = "⛅", "#FFD740", "rgba(255, 215, 64, 0.1)"
 
-# Email State Management
-if "last_broadcast" not in st.session_state:
-    st.session_state.last_broadcast = None
-
+if "last_broadcast" not in st.session_state: st.session_state.last_broadcast = None
 if st.session_state.last_broadcast != ai_label:
     send_nyeri_alert(ai_label, ai_advice, total_rain, emoji)
     st.session_state.last_broadcast = ai_label
 
-# ───── 5. UI DISPLAY ─────
-
+# ───── 4. UI DISPLAY ─────
 st.markdown("<h1 style='text-align: center; font-size: 85px; font-weight: 900; color: #00D4FF; margin-bottom: 0;'>NYERI WEATHER AI</h1>", unsafe_allow_html=True)
 st.markdown(f"<p style='text-align: center; color: #888; font-weight: 600;'>STATION SYNCED AT: {latest['timestamp']}</p>", unsafe_allow_html=True)
-
-# Progress bar for visual "Live" feeling
-st.sidebar.write("🟢 System Active")
-st.sidebar.progress(100)
 
 st.markdown(f"""
     <div class="hero-card" style="background-color: {bg_alpha}; border-top: 15px solid {color};">
@@ -117,8 +107,6 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 st.write("---")
-
-# Data Visualization
 col_graph, col_stats = st.columns([2, 1])
 with col_graph:
     fig = go.Figure(go.Scatter(x=[f"Wk {i+1}" for i in range(8)], y=forecast, fill='tozeroy', line=dict(color='#00D4FF', width=5), mode='lines+markers'))
@@ -126,24 +114,20 @@ with col_graph:
     st.plotly_chart(fig, use_container_width=True)
 
 with col_stats:
-    gauge = go.Figure(go.Indicator(mode = "gauge+number", value = total_rain, title = {'text': "Total Rain (mm)"}, gauge = {'bar': {'color': color}, 'axis': {'range': [0, 600]}}))
+    gauge = go.Figure(go.Indicator(mode="gauge+number", value=total_rain, title={'text': "Total Rain (mm)"}, gauge={'bar':{'color':color}, 'axis':{'range':[0,600]}}))
     gauge.update_layout(height=450, paper_bgcolor='rgba(0,0,0,0)')
     st.plotly_chart(gauge, use_container_width=True)
 
 st.write("---")
-
-# Five-Column Sensor Grid
 st.markdown("<h3 style='text-align: center; font-weight: 800;'>📍 LIVE STATION FEED</h3>", unsafe_allow_html=True)
 m1, m2, m3, m4, m5 = st.columns(5)
-
 with m1: st.markdown(f"<div class='card-temp'>🌡️<br><small>TEMP</small><br><h2>{latest['temperature']}°C</h2></div>", unsafe_allow_html=True)
 with m2: st.markdown(f"<div class='card-hum'>💧<br><small>HUMIDITY</small><br><h2>{latest['humidity']}%</h2></div>", unsafe_allow_html=True)
-with m3: st.markdown(f"<div class='card-wind'>🌬️<br><small>WIND</small><br><h2>{latest.get('wind_speed', 0)} m/s</h2></div>", unsafe_allow_html=True)
-with m4: st.markdown(f"<div class='card-solar'>☀️<br><small>SOLAR</small><br><h2>{latest.get('solar_radiation', 0)} W/m²</h2></div>", unsafe_allow_html=True)
-with m5: st.markdown(f"<div class='card-rain'>🌧️<br><small>RAIN</small><br><h2>{latest.get('precipitation', 0.0)} mm</h2></div>", unsafe_allow_html=True)
+with m3: st.markdown(f"<div class='card-wind'>🌬️<br><small>WIND</small><br><h2>{latest['wind_speed']} m/s</h2></div>", unsafe_allow_html=True)
+with m4: st.markdown(f"<div class='card-solar'>☀️<br><small>SOLAR</small><br><h2>{latest['solar_radiation']} W/m²</h2></div>", unsafe_allow_html=True)
+with m5: st.markdown(f"<div class='card-rain'>🌧️<br><small>RAIN</small><br><h2>{latest['precipitation']} mm</h2></div>", unsafe_allow_html=True)
 
 st.markdown("<div class='footer'>MADE FOR NYERI FARMERS WITH LOVE ❤️</div>", unsafe_allow_html=True)
 
-# Auto-refresh trigger (forces app to check for new data every 60 seconds)
 time.sleep(60)
 st.rerun()

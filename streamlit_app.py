@@ -19,12 +19,13 @@ st.markdown("""
         padding: 10px; 
         border-radius: 15px; 
         text-align: center; 
-        height: 120px; 
+        height: 130px; 
         display: flex; 
         flex-direction: column; 
         justify-content: center;
         background: rgba(255,255,255,0.02);
     }
+    .card-metric span { font-size: 20px; margin-bottom: 5px; } /* Emoji size */
     .card-metric small { font-size: 9px; font-weight: 700; color: #777; text-transform: uppercase; margin-bottom: 2px; }
     .card-metric h2 { font-size: 18px; margin: 0; font-weight: 800; color: #FFF; }
     .footer { text-align: center; padding: 20px; color: #444; font-size: 11px; }
@@ -36,10 +37,10 @@ SUPABASE_URL = "https://ffbkgocjztagavphjbsq.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmYmtnb2NqenRhZ2F2cGhqYnNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NzA5NjcsImV4cCI6MjA3NjI0Njk2N30.sudxLkD1r8ARMEKjVMiyQqTg1KkKR7gSrWA-CKjVKb4"
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# ───── 3. SMART DATA FETCH (IGNORES ZEROES) ─────
+# ───── 3. SMART DATA FETCH (SKIP ZEROES) ─────
 def fetch_active_data():
     try:
-        # Filter for rows where temperature > 0 to skip sensor errors
+        # Filtering for rows where temperature > 0 to ignore ESP8266/DHT glitches
         res = supabase.table("weather_data").select("*").gt("temperature", 0).order("timestamp", desc=True).limit(1).execute()
         return res.data[0] if res.data else None
     except: return None
@@ -63,7 +64,7 @@ ai_label = str(raw_data.get("season_label", "Syncing"))
 ai_advice = str(raw_data.get("crop_suggestions") or "")
 emoji, color, bg_alpha = ("🌧️", "#00E676", "rgba(0, 230, 118, 0.05)") if "Rainy" in ai_label else ("☀️", "#FF5252", "rgba(255, 82, 82, 0.05)")
 
-# ───── 5. UI ─────
+# ───── 5. UI DISPLAY ─────
 st.markdown(f"<h1 style='text-align: center; font-size: 45px; font-weight: 900; color: #00D4FF;'>NYERI WEATHER AI</h1>", unsafe_allow_html=True)
 
 st.markdown(f"""
@@ -84,15 +85,15 @@ with c2:
     gauge.update_layout(height=250, margin=dict(l=0, r=0, t=0, b=0))
     st.plotly_chart(gauge, use_container_width=True)
 
-# BOTTOM BOXES (Optimized Font)
+# BOTTOM BOXES (Emojis Restored + Smaller Fonts)
 m1, m2, m3, m4, m5 = st.columns(5)
-with m1: st.markdown(f"<div class='card-metric' style='border: 1px solid #FF6F00;'><small>Temp</small><h2>{sanitize(raw_data.get('temperature'))}°C</h2></div>", unsafe_allow_html=True)
-with m2: st.markdown(f"<div class='card-metric' style='border: 1px solid #0091EA;'><small>Humidity</small><h2>{sanitize(raw_data.get('humidity'))}%</h2></div>", unsafe_allow_html=True)
-with m3: st.markdown(f"<div class='card-metric' style='border: 1px solid #00C853;'><small>Wind</small><h2>{sanitize(raw_data.get('wind_speed'))}m/s</h2></div>", unsafe_allow_html=True)
-with m4: st.markdown(f"<div class='card-metric' style='border: 1px solid #FFD600;'><small>Solar</small><h2>{sanitize(raw_data.get('solar_radiation'))}W/m²</h2></div>", unsafe_allow_html=True)
-with m5: st.markdown(f"<div class='card-metric' style='border: 1px solid #AB47BC;'><small>Rain</small><h2>{sanitize(raw_data.get('precipitation'))}mm</h2></div>", unsafe_allow_html=True)
+with m1: st.markdown(f"<div class='card-metric' style='border: 1px solid #FF6F00;'><span>🌡️</span><small>Temp</small><h2>{sanitize(raw_data.get('temperature'))}°C</h2></div>", unsafe_allow_html=True)
+with m2: st.markdown(f"<div class='card-metric' style='border: 1px solid #0091EA;'><span>💧</span><small>Humidity</small><h2>{sanitize(raw_data.get('humidity'))}%</h2></div>", unsafe_allow_html=True)
+with m3: st.markdown(f"<div class='card-metric' style='border: 1px solid #00C853;'><span>🌬️</span><small>Wind</small><h2>{sanitize(raw_data.get('wind_speed'))}m/s</h2></div>", unsafe_allow_html=True)
+with m4: st.markdown(f"<div class='card-metric' style='border: 1px solid #FFD600;'><span>☀️</span><small>Solar</small><h2>{sanitize(raw_data.get('solar_radiation'))}W/m²</h2></div>", unsafe_allow_html=True)
+with m5: st.markdown(f"<div class='card-metric' style='border: 1px solid #AB47BC;'><span>🌧️</span><small>Rain</small><h2>{sanitize(raw_data.get('precipitation'))}mm</h2></div>", unsafe_allow_html=True)
 
-st.sidebar.write(f"✅ Showing Last Valid ID: {raw_data.get('id')}")
+st.sidebar.write(f"✅ Syncing ID: {raw_data.get('id')}")
 
 time.sleep(10)
 st.rerun()
